@@ -76,7 +76,15 @@ namespace CPPUnitTestInvestigatorTest
 		TEST_MODULE_ATTRIBUTE(L"ModuleAttribute5", L"ModuleAtribute5Value")
 	END_TEST_MODULE_ATTRIBUTE()
 
-	TEST_CLASS(CPPPUnitTestIntrospection)
+	TEST_CLASS(DummyClass)
+	{
+		TEST_METHOD(DummyAssert)
+		{
+			Assert::IsTrue(true);
+		}
+	};
+
+	TEST_CLASS(CPPUnitTestIntrospection)
 	{
 	public:
 		
@@ -118,5 +126,12 @@ namespace CPPUnitTestInvestigatorTest
 			Assert::IsTrue(attributes.size() == 5);
 		}
 
+		TEST_METHOD(TestGetClasses)
+		{
+			TestModule tm(IntrospecDllPath());
+			auto classes = tm.GetClassNames();
+
+			Assert::AreEqual(size_t(2), classes.size());
+		}
 	};
 }

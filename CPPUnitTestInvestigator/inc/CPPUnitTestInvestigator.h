@@ -36,7 +36,7 @@ namespace CppUnitTestInvestigator
 		uint32_t GetVersion();
 		std::vector<::Microsoft::VisualStudio::CppUnitTestFramework::ClassMetadata> GetTestClassInfo() const;
 		std::vector<std::wstring> GetModuleMethodNames() const;
-		std::vector<std::wstring> GetClassNames() const;
+		std::vector<std::string> GetClassNames() const;
 		std::vector<std::wstring> GetDecoratedClassNames() const;
 		std::vector<std::wstring> GetDecoratedMethodNames() const;
 		std::vector<std::wstring> GetMethodNames(const std::wstring &className) const;

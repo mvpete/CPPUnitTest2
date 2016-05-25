@@ -28,6 +28,7 @@ bool contains(const char *text, IteratorT begin, IteratorT end)
 }
 
 
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// TestModule
 TestModule::TestModule(const std::string &path)
@@ -38,16 +39,6 @@ TestModule::TestModule(const std::string &path)
 
 TestModule::~TestModule()
 {
-}
-
-uint32_t TestModule::GetVersion()
-{
-	return version_.version;
-}
-
-std::vector<::Microsoft::VisualStudio::CppUnitTestFramework::ClassMetadata> TestModule::GetTestClassInfo() const
-{
-	return classMetadata_;
 }
 
 void TestModule::LoadData()
@@ -79,13 +70,13 @@ void TestModule::LoadData()
 
 			PeUtils::AdvancePointer(head, sizeof(ClassMetadata));
 		}
-		else if (wcscmp(tag, L"TestMethodInfo") == 0	       || 
-				 wcscmp(tag, L"TestModuleInitializeInfo") == 0 ||
-				 wcscmp(tag, L"TestModuleCleanupInfo") == 0    ||
-				 wcscmp(tag, L"TestClassInitializeInfo") == 0  ||
-				 wcscmp(tag, L"TestClassCleanupInfo") == 0     ||
-				 wcscmp(tag, L"TestMethodInitializeInfo") == 0 ||
-				 wcscmp(tag, L"TestMethodCleanupInfo") == 0      )
+		else if (wcscmp(tag, L"TestMethodInfo") == 0 ||
+			wcscmp(tag, L"TestModuleInitializeInfo") == 0 ||
+			wcscmp(tag, L"TestModuleCleanupInfo") == 0 ||
+			wcscmp(tag, L"TestClassInitializeInfo") == 0 ||
+			wcscmp(tag, L"TestClassCleanupInfo") == 0 ||
+			wcscmp(tag, L"TestMethodInitializeInfo") == 0 ||
+			wcscmp(tag, L"TestMethodCleanupInfo") == 0)
 		{
 			MethodMetadata * mtd = reinterpret_cast<MethodMetadata*>(head);
 
@@ -94,7 +85,7 @@ void TestModule::LoadData()
 			const wchar_t *methodName = data.AdjustPointer(mtd->methodName);
 			auto line = mtd->lineNo;
 			const wchar_t *sourceFile = data.AdjustPointer(mtd->sourceFile);
-			
+
 			MethodMetadata adj = { tag, methodName, data.AdjustPointer(mtd->helpMethodName),data.AdjustPointer(mtd->helpMethodDecoratedName),sourceFile,line };
 
 			methodMetadata_.emplace_back(adj);
@@ -113,7 +104,7 @@ void TestModule::LoadData()
 		{
 			MethodAttributeMetadata *mtd = reinterpret_cast<MethodAttributeMetadata*>(head);
 			const void *ptr = load_.FindPtr(mtd->attributeValue);
-			MethodAttributeMetadata adj = { tag, data.AdjustPointer(mtd->attributeName), ptr!=nullptr?ptr:mtd->attributeValue, MethodAttributeMetadata::METHOD_ATTRIBUTE };
+			MethodAttributeMetadata adj = { tag, data.AdjustPointer(mtd->attributeName), ptr != nullptr ? ptr : mtd->attributeValue, MethodAttributeMetadata::METHOD_ATTRIBUTE };
 			methodAttributeMetadata_.emplace_back(adj);
 
 			PeUtils::AdvancePointer(head, sizeof(MethodAttributeMetadata));
@@ -128,6 +119,28 @@ void TestModule::LoadData()
 		}
 
 	}
+}
+
+uint32_t TestModule::GetVersion()
+{
+	return version_.version;
+}
+
+std::vector<::Microsoft::VisualStudio::CppUnitTestFramework::ClassMetadata> TestModule::GetTestClassInfo() const
+{
+	return classMetadata_;
+}
+
+std::vector<std::wstring> TestModule::GetModuleMethodNames() const
+{
+	std::vector<std::wstring> methods;
+	std::transform(methodMetadata_.begin(), methodMetadata_.end(), std::back_inserter(methods), [](const MethodMetadata &mtd)
+	{
+		if (mtd.methodName == nullptr)
+			return std::wstring();
+		return std::wstring(mtd.methodName);
+	});
+	return methods;
 }
 
 std::vector<std::pair<std::wstring, const void*>> TestModule::GetMethodAttributes(const std::string &methodName) const
@@ -152,7 +165,6 @@ std::vector<std::pair<std::wstring, const void*>> TestModule::GetMethodAttribute
 	return attributes;
 }
 
-
 std::vector<std::pair<std::wstring, std::wstring>> TestModule::GetModuleAttributes() const
 {
 	std::vector<std::pair<std::wstring, std::wstring>> attributes;
@@ -167,4 +179,15 @@ std::vector<std::pair<std::wstring, std::wstring>> TestModule::GetModuleAttribut
 		attributes.emplace_back(attr.attributeName, attr.attributeValue);
 	}
 	return attributes;
+}
+
+std::vector<std::string> TestModule::GetClassNames() const
+{
+	std::vector<std::string> classes;
+	for (auto cls : classMetadata_)
+	{
+		// how do I parse the class name??
+		classes.emplace_back(reinterpret_cast<const char*>(cls.helpMethodName));
+	}
+	return classes;
 }
