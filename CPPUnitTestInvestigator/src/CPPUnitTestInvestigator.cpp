@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <regex>
 
 using namespace CppUnitTestInvestigator;
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -187,7 +188,18 @@ std::vector<std::string> TestModule::GetClassNames() const
 	for (auto cls : classMetadata_)
 	{
 		// how do I parse the class name??
-		classes.emplace_back(reinterpret_cast<const char*>(cls.helpMethodName));
+		// extract the <contents> then pull the class as the last :: 
+		std::string name(reinterpret_cast<const char*>(cls.helpMethodName));
+		std::regex rn("<(.+)>");
+		std::smatch match;
+
+		if (std::regex_search(name, match, rn))
+		{
+			std::string clsname = match[1].str();
+			size_t pos = clsname.rfind("::");
+			if (pos != std::string::npos && pos+2 < clsname.size())
+				classes.emplace_back(clsname.substr(pos+2));
+		}
 	}
 	return classes;
 }

@@ -76,13 +76,16 @@ namespace CPPUnitTestInvestigatorTest
 		TEST_MODULE_ATTRIBUTE(L"ModuleAttribute5", L"ModuleAtribute5Value")
 	END_TEST_MODULE_ATTRIBUTE()
 
-	TEST_CLASS(DummyClass)
+	namespace nested
 	{
-		TEST_METHOD(DummyAssert)
+		TEST_CLASS(DummyClass)
 		{
-			Assert::IsTrue(true);
-		}
-	};
+			TEST_METHOD(DummyAssert)
+			{
+				Assert::IsTrue(true);
+			}
+		};
+	}
 
 	TEST_CLASS(CPPUnitTestIntrospection)
 	{
@@ -132,6 +135,8 @@ namespace CPPUnitTestInvestigatorTest
 			auto classes = tm.GetClassNames();
 
 			Assert::AreEqual(size_t(2), classes.size());
+			Assert::AreEqual(std::string("CPPUnitTestIntrospection"), classes[0]);
+			Assert::AreEqual(std::string("DummyClass"), classes[1]);
 		}
 	};
 }
