@@ -15,6 +15,10 @@
 
 namespace CppUnitTestInvestigator
 {
+	using ClassAttribute = std::pair<std::wstring, const void*>;
+	using ModuleAttribute = std::pair<std::wstring, std::wstring>;
+	using MethodAttribute = std::pair<std::wstring, const void*>;
+
 	class CPPUNITTEST_API TestModule
 	{
 		PeUtils::PeExplorer load_;
@@ -31,6 +35,9 @@ namespace CppUnitTestInvestigator
 		void LoadData();
 
 	public:
+
+		
+
 		TestModule(const std::string &modulePath);
 		~TestModule();
 		uint32_t GetVersion();
@@ -41,8 +48,9 @@ namespace CppUnitTestInvestigator
 		std::vector<std::wstring> GetDecoratedMethodNames() const;
 		std::vector<std::wstring> GetMethodNames(const std::wstring &className) const;
 
-		std::vector<std::pair<std::wstring, const void*>> GetMethodAttributes(const std::string &methodName) const;
-		std::vector<std::pair<std::wstring, std::wstring>> GetModuleAttributes() const;
+		std::vector<MethodAttribute> GetMethodAttributes(const std::string &methodName) const;
+		std::vector<ClassAttribute>  GetClassAttributes(const std::string &className) const;
+		std::vector<ModuleAttribute> GetModuleAttributes() const;
 	};
 
 };

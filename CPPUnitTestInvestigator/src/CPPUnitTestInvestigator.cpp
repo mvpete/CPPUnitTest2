@@ -1,4 +1,5 @@
 #include <inc/CPPUnitTestInvestigator.h>
+#include <string_span.h>
 
 #include <algorithm>
 #include <iterator>
@@ -28,6 +29,68 @@ bool contains(const char *text, IteratorT begin, IteratorT end)
 	return false;
 }
 
+template <typename IteratorT>
+int compare(IteratorT begin, IteratorT end, IteratorT begin2, IteratorT end2)
+{
+	auto s1 = end - begin;
+	auto s2 = end2 - begin2;
+
+	if (s1 < s2)
+		return 1;
+	if (s1 > s2)
+		return -1;
+
+	while (begin != end)
+	{
+		if (*begin > *begin2)
+			return -1;
+		else if (*begin < *begin2)
+			return 1;
+
+		++begin;
+		++begin2;
+	}
+	return 0;
+}
+
+template <typename ContainerT>
+int compare(ContainerT &rhs, ContainerT &lhs)
+{
+	return compare(rhs.begin(), rhs.end(), lhs.begin(), lhs.end());
+}
+
+
+bool ParseClassNameFromInnerTemplate(const std::string &fullName, std::string &className)
+{
+	// how do I parse the class name??
+	// extract the <contents> then pull the class as the last :: 
+	std::regex rn("<(.+)>");
+	std::smatch match;
+	if (std::regex_search(fullName, match, rn))
+	{
+		std::string clsname = match[1].str();
+		size_t pos = clsname.rfind("::");
+		if (pos != std::string::npos && pos + 2 < clsname.size())
+		{
+			className = clsname.substr(pos + 2);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ParseClassNameFromMethodName(const std::string &fullName, std::string &className)
+{
+	auto fo = fullName.rfind("::");
+	if (fo == std::string::npos)
+		return false;
+	auto so = fullName.rfind("::", fo-1);
+	if (so == std::string::npos)
+		return false;
+	className = fullName.substr(so+2, fo-so-2);
+	return true;
+	
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -122,6 +185,8 @@ void TestModule::LoadData()
 	}
 }
 
+
+
 uint32_t TestModule::GetVersion()
 {
 	return version_.version;
@@ -144,20 +209,23 @@ std::vector<std::wstring> TestModule::GetModuleMethodNames() const
 	return methods;
 }
 
-std::vector<std::pair<std::wstring, const void*>> TestModule::GetMethodAttributes(const std::string &methodName) const
+std::vector<MethodAttribute> TestModule::GetMethodAttributes(const std::string &methodName) const
 {
-	std::vector<std::pair<std::wstring, const void*>> attributes;
+	std::vector<MethodAttribute> attributes;
 	bool found = false;
 	for (auto attr : methodAttributeMetadata_)
 	{
-		const std::wstring tag(attr.tag); // to copy or not to copy, string view.
-		if (tag.compare(L"TestMethodAttributeStart") == 0)
+		gsl::cwstring_span<> tag = gsl::ensure_z(attr.tag,30);
+		gsl::cwstring_span<> start = gsl::ensure_z(L"TestMethodAttributeStart");
+		gsl::cwstring_span<> end = gsl::ensure_z(L"TestMethodAttributeEnd");
+
+		if (compare(tag, start) == 0)
 		{
 			const char *fn = reinterpret_cast<const char*>(attr.attributeValue);
 			if (contains(fn, methodName.begin(), methodName.end()))
 				found = true;
 		}
-		else if (tag.compare(L"TestMethodAttributeEnd") == 0 && found)
+		else if (compare(tag,end) == 0 && found)
 			break;
 		else if (found) 
 			attributes.emplace_back(attr.attributeName, attr.attributeValue);
@@ -166,9 +234,39 @@ std::vector<std::pair<std::wstring, const void*>> TestModule::GetMethodAttribute
 	return attributes;
 }
 
-std::vector<std::pair<std::wstring, std::wstring>> TestModule::GetModuleAttributes() const
+std::vector<ClassAttribute> TestModule::GetClassAttributes(const std::string &className) const
 {
-	std::vector<std::pair<std::wstring, std::wstring>> attributes;
+	bool found = false;
+	std::vector<ClassAttribute> attributes;
+	for (auto attr : classAttributeMetadata_)
+	{
+		gsl::cwstring_span<> tag = gsl::ensure_z(attr.tag);
+		gsl::cwstring_span<> start = gsl::ensure_z(L"TestClassAttributeStart");
+		gsl::cwstring_span<> end = gsl::ensure_z(L"TestClassAttributeEnd");
+
+		if (compare(tag, start) == 0)
+		{
+			gsl::cstring_span<> fullName = gsl::ensure_z(reinterpret_cast<const char*>(attr.attributeValue));
+			std::string fullName_s(fullName.begin(), fullName.end());
+			std::string parsedName;
+			if (ParseClassNameFromMethodName(fullName_s, parsedName) && parsedName.compare(className) == 0)
+			{
+				found = true;
+			}
+		}
+		else if (compare(tag, end) == 0 && found)
+		{
+			break;
+		}
+		else if(found)
+			attributes.emplace_back(attr.attributeName, attr.attributeValue);
+	}
+	return attributes;
+}
+
+std::vector<ModuleAttribute> TestModule::GetModuleAttributes() const
+{
+	std::vector<ModuleAttribute> attributes;
 	for (auto attr : moduleAttributeMetadata_)
 	{
 		std::wstring tag = attr.tag;
@@ -187,19 +285,13 @@ std::vector<std::string> TestModule::GetClassNames() const
 	std::vector<std::string> classes;
 	for (auto cls : classMetadata_)
 	{
-		// how do I parse the class name??
-		// extract the <contents> then pull the class as the last :: 
-		std::string name(reinterpret_cast<const char*>(cls.helpMethodName));
-		std::regex rn("<(.+)>");
-		std::smatch match;
-
-		if (std::regex_search(name, match, rn))
+		std::string classname;
+		if (ParseClassNameFromInnerTemplate(reinterpret_cast<const char*>(cls.helpMethodName), classname))
 		{
-			std::string clsname = match[1].str();
-			size_t pos = clsname.rfind("::");
-			if (pos != std::string::npos && pos+2 < clsname.size())
-				classes.emplace_back(clsname.substr(pos+2));
+			classes.emplace_back(classname);
 		}
+
+		
 	}
 	return classes;
 }
