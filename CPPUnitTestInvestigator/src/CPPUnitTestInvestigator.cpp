@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <iterator>
 #include <regex>
+#include <codecvt>
 
 using namespace CppUnitTestInvestigator;
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -29,8 +30,8 @@ bool contains(const char *text, IteratorT begin, IteratorT end)
 	return false;
 }
 
-template <typename IteratorT>
-int compare(IteratorT begin, IteratorT end, IteratorT begin2, IteratorT end2)
+template <typename IteratorT, typename IteratorT2>
+int compare(IteratorT begin, IteratorT end, IteratorT2 begin2, IteratorT2 end2)
 {
 	auto s1 = end - begin;
 	auto s2 = end2 - begin2;
@@ -58,7 +59,6 @@ int compare(ContainerT &rhs, ContainerT &lhs)
 {
 	return compare(rhs.begin(), rhs.end(), lhs.begin(), lhs.end());
 }
-
 
 bool ParseClassNameFromInnerTemplate(const std::string &fullName, std::string &className)
 {
@@ -92,11 +92,44 @@ bool ParseClassNameFromMethodName(const std::string &fullName, std::string &clas
 	
 }
 
+using convert_type = std::codecvt_utf8<wchar_t>;
+std::string to_string(const std::wstring &str)
+{
+	static std::wstring_convert<convert_type, wchar_t> converter;
+	return converter.to_bytes(str);
+}
+
+template <typename T>
+std::string from_char_ptr(const T* ptr)
+{
+	return std::string(reinterpret_cast<const char*>(ptr));
+}
+
+
+std::wstring to_wstring(const std::string &str)
+{
+	static std::wstring_convert<convert_type, wchar_t> converter;
+	return converter.from_bytes(str);
+}
+
+template <typename FnT>
+FnT GetProc(HMODULE h, const char *fn)
+{
+	return reinterpret_cast<FnT>(::GetProcAddress(h, fn));
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// helper function ptrs
+
+typedef GlobalMethodInfo* (*GlobalMethodInfoLoadFn)();
+typedef MemberMethodInfo* (*MembMethodInfoLoadFn)();
+
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 /// TestModule
 TestModule::TestModule(const std::string &path)
-	:load_(path)
+	:load_(path), path_(path)
 {
 	LoadData();
 }
@@ -185,8 +218,6 @@ void TestModule::LoadData()
 	}
 }
 
-
-
 uint32_t TestModule::GetVersion()
 {
 	return version_.version;
@@ -197,16 +228,38 @@ std::vector<::Microsoft::VisualStudio::CppUnitTestFramework::ClassMetadata> Test
 	return classMetadata_;
 }
 
-std::vector<std::wstring> TestModule::GetModuleMethodNames() const
+std::vector<std::string> TestModule::GetModuleMethodNames() const
 {
-	std::vector<std::wstring> methods;
+	std::vector<std::string> methods;
 	std::transform(methodMetadata_.begin(), methodMetadata_.end(), std::back_inserter(methods), [](const MethodMetadata &mtd)
 	{
 		if (mtd.methodName == nullptr)
-			return std::wstring();
-		return std::wstring(mtd.methodName);
+			return std::string();
+		return to_string(mtd.methodName);
 	});
 	return methods;
+}
+
+std::string TestModule::GetMethodDisplayName(const std::string &methodName) const
+{
+
+	auto attrs = GetMethodAttributes(methodName);
+	auto name = std::find_if(attrs.begin(), attrs.end(), [](const MethodAttribute & attr)
+	{
+		return attr.first.compare(L"TestName") == 0;
+	});
+
+	if (name != attrs.end())
+		return std::string(from_char_ptr(name->second));
+	else
+		return methodName;
+}
+
+std::string TestModule::GetDecoratedMethodName(const std::string &methodName) const
+{
+	auto info = GetMethodInfoByName(methodName);
+
+	return std::string(reinterpret_cast<const char*>(info.helpMethodDecoratedName));
 }
 
 std::vector<MethodAttribute> TestModule::GetMethodAttributes(const std::string &methodName) const
@@ -290,8 +343,109 @@ std::vector<std::string> TestModule::GetClassNames() const
 		{
 			classes.emplace_back(classname);
 		}
-
-		
 	}
 	return classes;
+}
+
+std::string TestModule::GetClassNameByMethodName(const std::string &methodName) const
+{
+	auto info = GetMethodInfoByName(methodName);
+
+	std::string className;
+	if (!ParseClassNameFromMethodName(from_char_ptr(info.helpMethodName), className))
+		throw std::runtime_error("failed to find class by method name");
+
+	return className;
+
+}
+
+
+const ClassMetadata & TestModule::GetClassInfoByName(const std::string &className) const
+{
+	auto metadata = std::find_if(classMetadata_.begin(), classMetadata_.end(), [&className](const ClassMetadata &cls)
+	{
+		std::string parsed;
+		if (ParseClassNameFromInnerTemplate(from_char_ptr(cls.helpMethodName), parsed))
+		{
+			return parsed.compare(className) == 0;
+		}
+		else
+			return false;
+	});
+
+	if (metadata == classMetadata_.end())
+		return *metadata;
+
+	throw std::runtime_error("failed to find class");
+}
+
+
+const MethodMetadata & TestModule::GetMethodInfoByName(const std::string &methodName) const
+{
+	auto i = std::find_if(methodMetadata_.begin(), methodMetadata_.end(), [&methodName](const MethodMetadata &mtd)
+	{
+		auto nr = gsl::ensure_z(mtd.methodName);
+
+		return compare(nr.begin(), nr.end(), methodName.begin(), methodName.end()) == 0;
+	});
+
+	if (i == methodMetadata_.end())
+		throw std::runtime_error("failed to find method");
+
+	return *i;
+}
+
+void TestModule::Execute(const std::vector<std::string> &methods)
+{
+
+	auto library = PeUtils::CreateExecutioner([this]()
+	{
+		return ::LoadLibrary(path_.c_str());
+	}, [](HMODULE h)
+	{
+		::FreeLibrary(h);
+	});
+
+	if (library == 0)
+		throw std::runtime_error("failed to load library");
+
+
+	// load all the required method metadata
+	const auto initTag = gsl::ensure_z(L"TestModuleInitializeInfo");
+	auto moduleInitHelp = std::find_if(methodMetadata_.begin(), methodMetadata_.end(), [initTag](const MethodMetadata &metd)
+	{
+		const auto tag = gsl::ensure_z(metd.tag);
+		return compare(tag, initTag) == 0;
+	});
+	
+	if (moduleInitHelp != methodMetadata_.end())
+	{
+		auto moduleInit = GetProc<GlobalMethodInfoLoadFn>(library, reinterpret_cast<const char*>(moduleInitHelp->helpMethodDecoratedName));
+
+		auto helper = moduleInit();
+		
+		// run the module load function
+		helper->pVoidFunc();
+	}
+	
+	// sort methods by class
+
+
+
+	const auto cleanupTag = gsl::ensure_z(L"TestModuleCleanupInfo");
+	auto moduleCleanupHelp = std::find_if(methodMetadata_.begin(), methodMetadata_.end(), [cleanupTag](const MethodMetadata &metd)
+	{
+		const auto tag = gsl::ensure_z(metd.tag);
+		return compare(tag, cleanupTag) == 0;
+	});
+
+	if (moduleCleanupHelp != methodMetadata_.end())
+	{
+		auto moduleCleanup = GetProc<GlobalMethodInfoLoadFn>(library, reinterpret_cast<const char*>(moduleCleanupHelp->helpMethodDecoratedName));
+
+		auto helper = moduleCleanup();
+
+		// run the module cleanup function
+		helper->pVoidFunc();
+	}
 }

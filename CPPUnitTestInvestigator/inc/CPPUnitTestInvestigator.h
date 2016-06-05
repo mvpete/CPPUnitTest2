@@ -22,7 +22,7 @@ namespace CppUnitTestInvestigator
 	class CPPUNITTEST_API TestModule
 	{
 		PeUtils::PeExplorer load_;
-		
+		const std::string path_;
 
 		Microsoft::VisualStudio::CppUnitTestFramework::TestDataVersion version_;
 		std::vector<::Microsoft::VisualStudio::CppUnitTestFramework::ClassMetadata> classMetadata_;
@@ -36,21 +36,29 @@ namespace CppUnitTestInvestigator
 
 	public:
 
-		
-
 		TestModule(const std::string &modulePath);
 		~TestModule();
+
 		uint32_t GetVersion();
+
 		std::vector<::Microsoft::VisualStudio::CppUnitTestFramework::ClassMetadata> GetTestClassInfo() const;
-		std::vector<std::wstring> GetModuleMethodNames() const;
+		std::vector<std::string> GetModuleMethodNames() const;
+		std::string GetMethodDisplayName(const std::string &methodName) const;
 		std::vector<std::string> GetClassNames() const;
-		std::vector<std::wstring> GetDecoratedClassNames() const;
-		std::vector<std::wstring> GetDecoratedMethodNames() const;
-		std::vector<std::wstring> GetMethodNames(const std::wstring &className) const;
+
+		std::string GetClassNameByMethodName(const std::string &methodName) const;
+		std::string GetDecoratedMethodName(const std::string &methodName) const;
+
+		std::vector<std::string> GetMethodNames(const std::wstring &className) const;
 
 		std::vector<MethodAttribute> GetMethodAttributes(const std::string &methodName) const;
 		std::vector<ClassAttribute>  GetClassAttributes(const std::string &className) const;
 		std::vector<ModuleAttribute> GetModuleAttributes() const;
+
+		const ::Microsoft::VisualStudio::CppUnitTestFramework::ClassMetadata & GetClassInfoByName(const std::string &className) const;
+		const ::Microsoft::VisualStudio::CppUnitTestFramework::MethodMetadata & GetMethodInfoByName(const std::string &methodName) const;
+
+		void Execute(const std::vector<std::string> &methods);
 	};
 
 };

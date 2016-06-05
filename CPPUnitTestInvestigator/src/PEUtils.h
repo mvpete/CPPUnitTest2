@@ -3,8 +3,10 @@
 
 #include <Windows.h>
 #include <string>
+#include <vector>
 #include <functional>
 #include <algorithm>
+
 
 namespace PeUtils
 {
@@ -46,10 +48,11 @@ namespace PeUtils
 			:handle_(gen()),release_(std::move(rel)),owned_(true)
 		{
 		}
+
 		Executioner(Executioner &&rhs)
-			:handle_(rhs.handle_), release_(std::move(rhs.release_)),owned(true)
+			:handle_(rhs.handle_), release_(std::move(rhs.release_)),owned_(true)
 		{
-			rhs_.owned_ = false;
+			rhs.owned_ = false;
 		}
 		~Executioner()
 		{
@@ -65,7 +68,7 @@ namespace PeUtils
 		{
 			return handle_;
 		}
-
+		
 		const T Get() const
 		{
 			return handle_;
@@ -115,14 +118,21 @@ namespace PeUtils
 		}
 
 		template <typename T>
-		T* AdjustPointer(T *ptr) 
-		{		
-			if (ptr == nullptr)
+		T* AdjustDword(DWORD ptr)
+		{
+			if (ptr == 0)
 				return nullptr;
 
 			AssertValid();
-			T *retptr = reinterpret_cast<T*>((reinterpret_cast<DWORD>(ptr) - imageBase_- section_->VirtualAddress +(DWORD)base_+section_->PointerToRawData));
+			T *retptr = reinterpret_cast<T*>(ptr - imageBase_ - section_->VirtualAddress + (DWORD)base_ + section_->PointerToRawData);
 			return retptr;
+
+		}
+
+		template <typename T>
+		T* AdjustPointer(T *ptr) 
+		{		
+			return AdjustDword<T>(reinterpret_cast<DWORD>(ptr));
 		}
 
 		bool IsValid();
@@ -159,14 +169,32 @@ namespace PeUtils
 		Section GetSection(const std::string &name) const;
 		Section GetSection(DWORD ptr) const;
 
+		std::vector<std::string> GetImports() const;
+
 		template<typename T>
-		T* FindPtr(T *ptr)
+		T* FindDwordPtr(DWORD ptr) const
+		{
+			Section s = GetSection(ptr);
+			if (!s.IsValid())
+				return nullptr;
+			return s.AdjustDword<T>(ptr);
+		}
+
+		template<typename T>
+		T* FindDwordPtr(DWORD ptr)
 		{
 			Section s = GetSection(reinterpret_cast<DWORD>(ptr));
 			if (!s.IsValid())
 				return nullptr;
 			return s.AdjustPointer<T>(ptr);
 		}
+		
+		template<typename T>
+		T* FindPtr(T *ptr) const
+		{
+			return FindDwordPtr<T>(reinterpret_cast<DWORD>(ptr));
+		}
+
 
 
 	};

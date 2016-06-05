@@ -89,8 +89,6 @@ PeExplorer::PeExplorer(const std::string &path)
 	{
 		type_ = Type::Obj;
 	}
-
-	
 }
 
 PeExplorer::Type PeExplorer::GetType() const
@@ -161,4 +159,23 @@ Section PeExplorer::GetSection(DWORD ptr) const
 		return Section();
 	return Section(f, view_.Get(), nth_->OptionalHeader.ImageBase);
 	
+}
+
+std::vector<std::string> PeExplorer::GetImports() const
+{
+	Section imports = GetSection(".idata"); // TODO: replace with array index lookup
+
+	PIMAGE_IMPORT_DESCRIPTOR impd = reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(imports.PointerToRawData());
+
+	while (1)
+	{
+		if (impd->TimeDateStamp == 0 && impd->TimeDateStamp == 0)
+			break;
+
+		auto name = FindDwordPtr<const char>(impd->Name);
+
+		++impd;
+	}
+
+	return std::vector<std::string>();
 }

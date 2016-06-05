@@ -58,7 +58,7 @@ const IteratorToString<T> Wrap(const T& cnt, typename T::const_iterator &it)
 	return IteratorToString<T>(cnt, it);
 }
 
-template<> inline std::wstring Microsoft::VisualStudio::CppUnitTestFramework::ToString<IteratorToString<std::vector<std::wstring>>>(const IteratorToString<std::vector<std::wstring>> &tsw)
+template<> inline std::wstring Microsoft::VisualStudio::CppUnitTestFramework::ToString<IteratorToString<std::vector<std::string>>>(const IteratorToString<std::vector<std::string>> &tsw)
 {
 	return tsw.ToString();
 }
@@ -87,6 +87,7 @@ namespace CPPUnitTestInvestigatorTest
 				TEST_CLASS_ATTRIBUTE(L"TestClassAttribute3", L"TestClassAttributeValue")
 			END_TEST_CLASS_ATTRIBUTE()
 
+				
 			TEST_METHOD(DummyAssert)
 			{
 				Assert::IsTrue(true);
@@ -98,13 +99,13 @@ namespace CPPUnitTestInvestigatorTest
 	TEST_CLASS(CPPUnitTestIntrospection)
 	{
 	public:
-		
+
 		BEGIN_TEST_CLASS_ATTRIBUTE()
 			TEST_CLASS_ATTRIBUTE(L"CPPUintTestAttribute", "Test")
-		END_TEST_CLASS_ATTRIBUTE()
+			END_TEST_CLASS_ATTRIBUTE()
 
-		// This test is testing that the currently loaded test DLL is the same as the 
-		TEST_METHOD(TestVersionMatch)
+			// This test is testing that the currently loaded test DLL is the same as the 
+			TEST_METHOD(TestVersionMatch)
 		{
 			TestModule tm(IntrospecDllPath());
 			Assert::IsTrue(tm.GetVersion() == __CPPUNITTEST_VERSION__);
@@ -115,15 +116,15 @@ namespace CPPUnitTestInvestigatorTest
 			TestModule tm(IntrospecDllPath());
 			auto methods = tm.GetModuleMethodNames();
 
-			Assert::AreNotEqual(Wrap(methods,std::end(methods)), Wrap(methods, std::find(std::begin(methods), std::end(methods), std::wstring(L"TestGetModuleMethodName"))), L"TestMethod not found");
+			Assert::AreNotEqual(Wrap(methods, std::end(methods)), Wrap(methods, std::find(std::begin(methods), std::end(methods), std::string("TestGetModuleMethodName"))), L"TestMethod not found");
 		}
 
 		BEGIN_TEST_METHOD_ATTRIBUTE(TestGetMethodAttributes)
 			TEST_METHOD_ATTRIBUTE(L"TestAttribute", "TestAttributeValue")
 			TEST_METHOD_ATTRIBUTE(L"TestAttributeIntValue", reinterpret_cast<const void*>(5))
-		END_TEST_METHOD_ATTRIBUTE()
+			END_TEST_METHOD_ATTRIBUTE()
 
-		TEST_METHOD(TestGetMethodAttributes)
+			TEST_METHOD(TestGetMethodAttributes)
 		{
 			TestModule tm(IntrospecDllPath());
 			auto attributes = tm.GetMethodAttributes("TestGetMethodAttributes");
@@ -141,7 +142,7 @@ namespace CPPUnitTestInvestigatorTest
 			Assert::IsTrue(attributes.size() == 5);
 		}
 
-		TEST_METHOD(TestGetClasses)
+		TEST_METHOD(TestGetClassNames)
 		{
 			TestModule tm(IntrospecDllPath());
 			auto classes = tm.GetClassNames();
@@ -158,5 +159,36 @@ namespace CPPUnitTestInvestigatorTest
 			auto attributes = tm.GetClassAttributes("DummyClass");
 			Assert::AreEqual(size_t(3), attributes.size());
 		}
+
+		TEST_METHOD(TestGetClassInfo)
+		{
+			TestModule tm(IntrospecDllPath());
+
+			auto attributes = tm.GetTestClassInfo();
+			Assert::AreEqual(size_t(2), attributes.size());
+		}
+
+		BEGIN_TEST_METHOD_ATTRIBUTE(TestOverrideTestName)
+			TEST_METHOD_ATTRIBUTE(L"TestName", "My Override Test Name")
+		END_TEST_METHOD_ATTRIBUTE()
+
+		TEST_METHOD(TestOverrideTestName)
+		{
+			TestModule tm(IntrospecDllPath());
+
+			std::string displayName = tm.GetMethodDisplayName("TestOverrideTestName");
+			Assert::AreEqual(std::string("My Override Test Name"), displayName);
+		}
+
+
+		TEST_METHOD(TestGetTestClassByMethod)
+		{
+			TestModule tm(IntrospecDllPath());
+
+			std::string myClass = tm.GetClassNameByMethodName("TestGetTestClassByMethod");
+			
+			Assert::AreEqual(std::string("CPPUnitTestIntrospection"), myClass, L"class name mismatch");
+		}
+
 	};
 }
