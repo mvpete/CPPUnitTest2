@@ -125,8 +125,6 @@ WORD PeExplorer::GetSectionCount() const
 
 Section PeExplorer::GetSection(const std::string &name) const
 {
-	
-
 	auto i = IMAGE_FIRST_SECTION(nth_);
 	auto i_end = i + GetImageFileHeader()->NumberOfSections;
 

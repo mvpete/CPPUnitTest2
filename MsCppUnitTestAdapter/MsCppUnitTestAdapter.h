@@ -8,6 +8,7 @@
 
 using namespace System;
 using namespace System::Collections::Generic;
+using namespace Microsoft::VisualStudio::TestPlatform::ObjectModel;
 
 namespace MsCppUnitTestAdapter 
 {
@@ -26,15 +27,26 @@ namespace MsCppUnitTestAdapter
 	public:
 		property System::String ^ DisplayName;
 		property System::String ^ FullyQualifiedName;
+		property System::String ^ FileName;
+		property int LineNumber;
+		property System::String ^ ClassName;
 	};
-
+	
 	public ref class VsTestAdapterModuleDiscoverer
 	{
 	public:
 		static IEnumerable<TestInfo ^>^ DiscoverTests(System::String ^source);
 	};
 
-	public ref class VsTestAdapeterModuleExecutor
+	public ref class VsTestAdapterExecutionContext
 	{
+		
+		CppUnitTestInvestigator::TestExecutionContext *context_;
+
+	public:
+		VsTestAdapterExecutionContext(System::String ^sourceFile);
+		~VsTestAdapterExecutionContext();
+
+		void Execute(System::String ^methodName, TestResult ^res);
 	};
 }

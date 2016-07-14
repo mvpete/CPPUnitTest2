@@ -2,6 +2,7 @@
 #include <string_span.h>
 
 #include <algorithm>
+#include <map>
 #include <iterator>
 #include <regex>
 #include <codecvt>
@@ -123,7 +124,7 @@ FnT GetProc(HMODULE h, const char *fn)
 
 typedef GlobalMethodInfo* (*GlobalMethodInfoLoadFn)();
 typedef MemberMethodInfo* (*MembMethodInfoLoadFn)();
-
+typedef TestClassInfo* (*GetClassInfoFn)();
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -140,12 +141,15 @@ TestModule::~TestModule()
 
 void TestModule::LoadData()
 {
+	auto version = load_.GetSection("testvers");
+	if (!version.IsValid())
+		throw std::runtime_error("invalid DLL");
+
+	version_ = *version.PointerToRawData<Microsoft::VisualStudio::CppUnitTestFramework::TestDataVersion*>();
+	
 	auto data = load_.GetSection(".rdata"); // this is where static strings are kept
 	auto testdata = load_.GetSection("testdata");
-
-	auto version = load_.GetSection("testvers");
-	version_ = *version.PointerToRawData<Microsoft::VisualStudio::CppUnitTestFramework::TestDataVersion*>();
-
+	
 	// get the first
 	wchar_t **head = testdata.PointerToRawData<wchar_t **>();
 	DWORD end = testdata.PointerToRawData() + testdata.SizeOfRawData();
@@ -242,7 +246,6 @@ std::vector<std::string> TestModule::GetModuleMethodNames() const
 
 std::string TestModule::GetMethodDisplayName(const std::string &methodName) const
 {
-
 	auto attrs = GetMethodAttributes(methodName);
 	auto name = std::find_if(attrs.begin(), attrs.end(), [](const MethodAttribute & attr)
 	{
@@ -260,6 +263,21 @@ std::string TestModule::GetDecoratedMethodName(const std::string &methodName) co
 	auto info = GetMethodInfoByName(methodName);
 
 	return std::string(reinterpret_cast<const char*>(info.helpMethodDecoratedName));
+}
+
+bool TestModule::GetDecoratedMethodName(const std::string &methodName, std::string &decoratedName) const
+{
+	// TODO: Restructure this so that I don't need the T/C
+	try
+	{
+		auto info = GetMethodInfoByName(methodName);
+		decoratedName = reinterpret_cast<const char*>(info.helpMethodDecoratedName);
+		return true;
+	}
+	catch (...)
+	{
+		return false;
+	}
 }
 
 std::vector<MethodAttribute> TestModule::GetMethodAttributes(const std::string &methodName) const
@@ -356,7 +374,6 @@ std::string TestModule::GetClassNameByMethodName(const std::string &methodName) 
 		throw std::runtime_error("failed to find class by method name");
 
 	return className;
-
 }
 
 
@@ -373,7 +390,7 @@ const ClassMetadata & TestModule::GetClassInfoByName(const std::string &classNam
 			return false;
 	});
 
-	if (metadata == classMetadata_.end())
+	if (metadata != classMetadata_.end())
 		return *metadata;
 
 	throw std::runtime_error("failed to find class");
@@ -395,57 +412,95 @@ const MethodMetadata & TestModule::GetMethodInfoByName(const std::string &method
 	return *i;
 }
 
-void TestModule::Execute(const std::vector<std::string> &methods)
+const std::string& TestModule::Path() const
 {
+	return path_;
+}
 
-	auto library = PeUtils::CreateExecutioner([this]()
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+/// TestExecutionContext
+TestExecutionContext::TestExecutionContext(const std::string &source)
+	:moduleInfo_(source), classInfo_(nullptr)
+{
+	// This is where the framework dll sits
+	::SetDllDirectoryA("C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\Common7\\IDE\\CommonExtensions\\Microsoft\\TestWindow\\Extensions\\CppUnitFramework");
+
+	module_ = ::LoadLibrary(moduleInfo_.Path().c_str());
+	if (module_ == 0)
 	{
-		return ::LoadLibrary(path_.c_str());
-	}, [](HMODULE h)
+		throw std::runtime_error("failed to setup test execution context"); // hehe.
+	}
+}
+
+TestExecutionContext::~TestExecutionContext()
+{
+	::FreeLibrary(module_);
+}
+
+void TestExecutionContext::Initialize()
+{
+	std::string initDecorated;
+	moduleInfo_.GetDecoratedMethodName("TestModuleInitializeInfo", initDecorated);
+
+	auto moduleInit = GetProc<GlobalMethodInfoLoadFn>(module_, initDecorated.c_str());
+
+	auto helper = moduleInit();
+
+	// run the module load function
+	helper->pVoidFunc();
+}
+
+void TestExecutionContext::Cleanup()
+{
+	std::string initDecorated;
+	moduleInfo_.GetDecoratedMethodName("TestModuleCleanupInfo", initDecorated);
+
+	auto moduleInit = GetProc<GlobalMethodInfoLoadFn>(module_, initDecorated.c_str());
+
+	auto helper = moduleInit();
+
+	// run the module load function
+	helper->pVoidFunc();
+}
+
+void TestExecutionContext::Execute(const std::string &methodName, IExecutionCallback *cb)
+{
+	auto className = moduleInfo_.GetClassNameByMethodName(methodName);
+	auto cInfoHelp = moduleInfo_.GetClassInfoByName(className);
+	auto cInfoFn = GetProc<GetClassInfoFn>(module_, reinterpret_cast<const char*>(cInfoHelp.helpMethodDecoratedName));
+	auto cInfo = cInfoFn();
+	if (cInfo != classInfo_)
 	{
-		::FreeLibrary(h);
-	});
-
-	if (library == 0)
-		throw std::runtime_error("failed to load library");
-
-
-	// load all the required method metadata
-	const auto initTag = gsl::ensure_z(L"TestModuleInitializeInfo");
-	auto moduleInitHelp = std::find_if(methodMetadata_.begin(), methodMetadata_.end(), [initTag](const MethodMetadata &metd)
-	{
-		const auto tag = gsl::ensure_z(metd.tag);
-		return compare(tag, initTag) == 0;
-	});
-	
-	if (moduleInitHelp != methodMetadata_.end())
-	{
-		auto moduleInit = GetProc<GlobalMethodInfoLoadFn>(library, reinterpret_cast<const char*>(moduleInitHelp->helpMethodDecoratedName));
-
-		auto helper = moduleInit();
-		
-		// run the module load function
-		helper->pVoidFunc();
+		classInfo_ = cInfo;
+		// run the class initializer method
 	}
 	
-	// sort methods by class
+	// TODO: wrappers for RAII
+	auto instance = PeUtils::CreateExecutioner([this]() { return classInfo_->pNewMethod(); }, [this](TestClassImpl *inst) { return 	classInfo_->pDeleteMethod(inst); });
 
-
-
-	const auto cleanupTag = gsl::ensure_z(L"TestModuleCleanupInfo");
-	auto moduleCleanupHelp = std::find_if(methodMetadata_.begin(), methodMetadata_.end(), [cleanupTag](const MethodMetadata &metd)
+	// TODO: execute test method initialize
+	auto mInfoFn = GetProc<MembMethodInfoLoadFn>(module_, moduleInfo_.GetDecoratedMethodName(methodName).c_str());
+	auto mInfo = mInfoFn();
+	
+	try
 	{
-		const auto tag = gsl::ensure_z(metd.tag);
-		return compare(tag, cleanupTag) == 0;
-	});
-
-	if (moduleCleanupHelp != methodMetadata_.end())
-	{
-		auto moduleCleanup = GetProc<GlobalMethodInfoLoadFn>(library, reinterpret_cast<const char*>(moduleCleanupHelp->helpMethodDecoratedName));
-
-		auto helper = moduleCleanup();
-
-		// run the module cleanup function
-		helper->pVoidFunc();
+		instance.Get()->__Invoke(mInfo->method.pVoidMethod); // hmmm... 
 	}
+	catch (const std::exception &e)
+	{
+		cb->OnError(e.what());
+		return;
+	}
+	catch (...)
+	{
+		cb->OnError("Unknown C++ Exception");
+		return;
+	}
+
+	cb->OnComplete();
+	// TODO: execute test method cleanup
+
+	// TODO: execute class cleanup function
+
+
 }

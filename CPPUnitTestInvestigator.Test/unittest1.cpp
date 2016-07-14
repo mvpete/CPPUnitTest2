@@ -179,8 +179,7 @@ namespace CPPUnitTestInvestigatorTest
 			std::string displayName = tm.GetMethodDisplayName("TestOverrideTestName");
 			Assert::AreEqual(std::string("My Override Test Name"), displayName);
 		}
-
-
+		
 		TEST_METHOD(TestGetTestClassByMethod)
 		{
 			TestModule tm(IntrospecDllPath());
@@ -188,6 +187,12 @@ namespace CPPUnitTestInvestigatorTest
 			std::string myClass = tm.GetClassNameByMethodName("TestGetTestClassByMethod");
 			
 			Assert::AreEqual(std::string("CPPUnitTestIntrospection"), myClass, L"class name mismatch");
+		}
+
+		TEST_METHOD(ThisTestWillFail)
+		{
+			//Logger::WriteMessage(L"Logged");
+			throw std::runtime_error("Test Failed with a KNOWN C++ Exception");
 		}
 
 	};
