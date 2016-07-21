@@ -13,4 +13,7 @@ it's foundation is really cool and they played some neat tricks to expose the te
   
 2) When the execution context tries to load a library with dependencies, the message is "failed to setup execution context"
   - This one is a little harder, I haven't fixed it quite yet. But I will.
+  
+3) Tests can only be named by the class name, this doesn't allow for any spaces in the test name
+  - Added a specific attribute that allows the test name to be overrided.
 
