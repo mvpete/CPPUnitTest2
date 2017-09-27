@@ -10,6 +10,7 @@ it's foundation is really cool and they played some neat tricks to expose the te
 ### Gripes
 1) When a C++ exception (std::exception) is thrown, the output in the test window is "an unknown C++ exception occurred". 
   - This seems silly because if it's a standard exception they should at least be able to print the message from e.what().
+  - After an enlightening ah-ha moment at CPPCON2017, I realised this may be less straightforward than I thought. Could it be that there are ABI compatibility issues between different compiler versions for std::exception? I'm not sure I care about this for my personal projects, but Microsoft probably does. :P
   
 2) When the execution context tries to load a library with dependencies, the message is "failed to setup execution context"
   - This one is a little harder, I haven't fixed it quite yet. But I will. This information is available in the PE format, why not walk it and show the missing library.
