@@ -85,20 +85,6 @@ namespace PeUtils
 
 	class PeExplorer;
 
-	class ImageFileHeader
-	{
-		
-	public:
-		ImageFileHeader(PeExplorer &pe);
-
-		WORD GetMachine();
-		WORD GetSectionCount();
-		DWORD GetTimeDateStamp();
-		DWORD GetPointerToSymbolTable();
-		WORD GetCharacteristics();
-		WORD GetSizeOfOptionalHeader();
-	};
-
 	class Section
 	{
 		PIMAGE_SECTION_HEADER section_;
@@ -198,7 +184,6 @@ namespace PeUtils
 
 
 	};
-
 
 	template<typename T>
 	void AdvancePointer(T*& ptr, DWORD len)

@@ -1,0 +1,15 @@
+test_class_initialize
+
+test_class_ctor
+test_method_initialize
+test_method_2
+test_method_cleanup
+test_class_dtor
+
+test_class_ctor
+test_method_initialize
+test_method_1
+test_method_cleanup
+test_class_dtor
+
+test_class_cleanup

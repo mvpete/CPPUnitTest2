@@ -1,4 +1,5 @@
 #include <inc/CPPUnitTestInvestigator.h>
+#include <Exception>
 #include <string_span.h>
 
 #include <algorithm>
@@ -6,6 +7,8 @@
 #include <iterator>
 #include <regex>
 #include <codecvt>
+
+#include <stlx/inc/algorithm.h>
 
 using namespace CppUnitTestInvestigator;
 using namespace Microsoft::VisualStudio::CppUnitTestFramework;
@@ -103,6 +106,9 @@ std::string to_string(const std::wstring &str)
 template <typename T>
 std::string from_char_ptr(const T* ptr)
 {
+	if (!ptr)
+		return std::string();
+
 	return std::string(reinterpret_cast<const char*>(ptr));
 }
 
@@ -128,18 +134,16 @@ typedef TestClassInfo* (*GetClassInfoFn)();
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// TestModule
-TestModule::TestModule(const std::string &path)
+/// TestModuleInfo
+TestModuleInfo::TestModuleInfo(const std::string &path)
 	:load_(path), path_(path)
 {
 	LoadData();
 }
 
-TestModule::~TestModule()
-{
-}
+TestModuleInfo::~TestModuleInfo() = default;
 
-void TestModule::LoadData()
+void TestModuleInfo::LoadData()
 {
 	auto version = load_.GetSection("testvers");
 	if (!version.IsValid())
@@ -222,21 +226,29 @@ void TestModule::LoadData()
 	}
 }
 
-uint32_t TestModule::GetVersion()
+uint32_t TestModuleInfo::GetVersion()
 {
 	return version_.version;
 }
 
-std::vector<::Microsoft::VisualStudio::CppUnitTestFramework::ClassMetadata> TestModule::GetTestClassInfo() const
+std::vector<::Microsoft::VisualStudio::CppUnitTestFramework::ClassMetadata> TestModuleInfo::GetTestClassInfo() const
 {
 	return classMetadata_;
 }
 
-std::vector<std::string> TestModule::GetModuleMethodNames() const
+std::vector<std::string> TestModuleInfo::GetModuleMethodNames() const
 {
-	std::vector<std::string> methods;
-	std::transform(methodMetadata_.begin(), methodMetadata_.end(), std::back_inserter(methods), [](const MethodMetadata &mtd)
+	auto cpy = methodMetadata_;
+
+	stdx::erase_if(cpy, [](const MethodMetadata &mtd)
 	{
+		return stdx::contains(std::wstring(mtd.tag), std::wstring(L"InitializeInfo")) || stdx::contains(std::wstring(mtd.tag), std::wstring(L"CleanupInfo"));
+	});
+
+	std::vector<std::string> methods;
+	std::transform(cpy.begin(), cpy.end(), std::back_inserter(methods), [](const MethodMetadata &mtd)
+	{
+
 		if (mtd.methodName == nullptr)
 			return std::string();
 		return to_string(mtd.methodName);
@@ -244,7 +256,7 @@ std::vector<std::string> TestModule::GetModuleMethodNames() const
 	return methods;
 }
 
-std::string TestModule::GetMethodDisplayName(const std::string &methodName) const
+std::string TestModuleInfo::GetMethodDisplayName(const std::string &methodName) const
 {
 	auto attrs = GetMethodAttributes(methodName);
 	auto name = std::find_if(attrs.begin(), attrs.end(), [](const MethodAttribute & attr)
@@ -258,14 +270,14 @@ std::string TestModule::GetMethodDisplayName(const std::string &methodName) cons
 		return methodName;
 }
 
-std::string TestModule::GetDecoratedMethodName(const std::string &methodName) const
+std::string TestModuleInfo::GetDecoratedMethodName(const std::string &methodName) const
 {
 	auto info = GetMethodInfoByName(methodName);
 
 	return std::string(reinterpret_cast<const char*>(info.helpMethodDecoratedName));
 }
 
-bool TestModule::GetDecoratedMethodName(const std::string &methodName, std::string &decoratedName) const
+bool TestModuleInfo::GetDecoratedMethodName(const std::string &methodName, std::string &decoratedName) const
 {
 	// TODO: Restructure this so that I don't need the T/C
 	try
@@ -280,7 +292,7 @@ bool TestModule::GetDecoratedMethodName(const std::string &methodName, std::stri
 	}
 }
 
-std::vector<MethodAttribute> TestModule::GetMethodAttributes(const std::string &methodName) const
+std::vector<MethodAttribute> TestModuleInfo::GetMethodAttributes(const std::string &methodName) const
 {
 	std::vector<MethodAttribute> attributes;
 	bool found = false;
@@ -305,7 +317,7 @@ std::vector<MethodAttribute> TestModule::GetMethodAttributes(const std::string &
 	return attributes;
 }
 
-std::vector<ClassAttribute> TestModule::GetClassAttributes(const std::string &className) const
+std::vector<ClassAttribute> TestModuleInfo::GetClassAttributes(const std::string &className) const
 {
 	bool found = false;
 	std::vector<ClassAttribute> attributes;
@@ -335,7 +347,7 @@ std::vector<ClassAttribute> TestModule::GetClassAttributes(const std::string &cl
 	return attributes;
 }
 
-std::vector<ModuleAttribute> TestModule::GetModuleAttributes() const
+std::vector<ModuleAttribute> TestModuleInfo::GetModuleAttributes() const
 {
 	std::vector<ModuleAttribute> attributes;
 	for (auto attr : moduleAttributeMetadata_)
@@ -351,7 +363,7 @@ std::vector<ModuleAttribute> TestModule::GetModuleAttributes() const
 	return attributes;
 }
 
-std::vector<std::string> TestModule::GetClassNames() const
+std::vector<std::string> TestModuleInfo::GetClassNames() const
 {
 	std::vector<std::string> classes;
 	for (auto cls : classMetadata_)
@@ -365,7 +377,7 @@ std::vector<std::string> TestModule::GetClassNames() const
 	return classes;
 }
 
-std::string TestModule::GetClassNameByMethodName(const std::string &methodName) const
+std::string TestModuleInfo::GetClassNameByMethodName(const std::string &methodName) const
 {
 	auto info = GetMethodInfoByName(methodName);
 
@@ -376,8 +388,7 @@ std::string TestModule::GetClassNameByMethodName(const std::string &methodName) 
 	return className;
 }
 
-
-const ClassMetadata & TestModule::GetClassInfoByName(const std::string &className) const
+const ClassMetadata & TestModuleInfo::GetClassInfoByName(const std::string &className) const
 {
 	auto metadata = std::find_if(classMetadata_.begin(), classMetadata_.end(), [&className](const ClassMetadata &cls)
 	{
@@ -396,8 +407,7 @@ const ClassMetadata & TestModule::GetClassInfoByName(const std::string &classNam
 	throw std::runtime_error("failed to find class");
 }
 
-
-const MethodMetadata & TestModule::GetMethodInfoByName(const std::string &methodName) const
+const MethodMetadata & TestModuleInfo::GetMethodInfoByName(const std::string &methodName) const
 {
 	auto i = std::find_if(methodMetadata_.begin(), methodMetadata_.end(), [&methodName](const MethodMetadata &mtd)
 	{
@@ -412,35 +422,41 @@ const MethodMetadata & TestModule::GetMethodInfoByName(const std::string &method
 	return *i;
 }
 
-const std::string& TestModule::Path() const
+const std::string& TestModuleInfo::Path() const
 {
 	return path_;
 }
 
+
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
-/// TestExecutionContext
-TestExecutionContext::TestExecutionContext(const std::string &source)
-	:moduleInfo_(source), classInfo_(nullptr)
+/// TestModule -- will load the test DLL and initialize it, on dtor run the cleanup
+TestModule::TestModule(const std::string &source, IReportException *exceptionHandler)
+	:moduleInfo_(source), exceptionHandler_(exceptionHandler)
 {
 	// This is where the framework dll sits
 	::SetDllDirectoryA("C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\Common7\\IDE\\CommonExtensions\\Microsoft\\TestWindow\\Extensions\\CppUnitFramework");
-
+	Instance = this;
+	auto h = AddVectoredExceptionHandler(1, &OnExceptionThunk);
 	module_ = ::LoadLibrary(moduleInfo_.Path().c_str());
 	if (module_ == 0)
 	{
-		throw std::runtime_error("failed to setup test execution context"); // hehe.
+		throw std::runtime_error("failed to setup test execution context"); // hehe. fttfo.
 	}
 }
 
-TestExecutionContext::~TestExecutionContext()
+TestModule::~TestModule()
 {
 	::FreeLibrary(module_);
 }
 
-void TestExecutionContext::Initialize()
+TestModule * TestModule::Instance = nullptr;
+
+void TestModule::InitializeModule()
 {
 	std::string initDecorated;
-	moduleInfo_.GetDecoratedMethodName("TestModuleInitializeInfo", initDecorated);
+	if (!moduleInfo_.GetDecoratedMethodName("TestModuleInitializeInfo", initDecorated))
+		return;
 
 	auto moduleInit = GetProc<GlobalMethodInfoLoadFn>(module_, initDecorated.c_str());
 
@@ -450,10 +466,11 @@ void TestExecutionContext::Initialize()
 	helper->pVoidFunc();
 }
 
-void TestExecutionContext::Cleanup()
+void TestModule::ModuleCleanup()
 {
 	std::string initDecorated;
-	moduleInfo_.GetDecoratedMethodName("TestModuleCleanupInfo", initDecorated);
+	if (!moduleInfo_.GetDecoratedMethodName("TestModuleCleanupInfo", initDecorated))
+		return;
 
 	auto moduleInit = GetProc<GlobalMethodInfoLoadFn>(module_, initDecorated.c_str());
 
@@ -463,44 +480,105 @@ void TestExecutionContext::Cleanup()
 	helper->pVoidFunc();
 }
 
-void TestExecutionContext::Execute(const std::string &methodName, IExecutionCallback *cb)
+TestClass_* TestModule::CreateClass(const std::string &className)
+{
+	// this will create a new TestClass_ and call it's initialize, since that is global it's okay.
+	return new TestClass_(*this, className);
+
+}
+
+TestClass_* TestModule::CreateClassFromMethodName(const std::string &methodName)
 {
 	auto className = moduleInfo_.GetClassNameByMethodName(methodName);
-	auto cInfoHelp = moduleInfo_.GetClassInfoByName(className);
-	auto cInfoFn = GetProc<GetClassInfoFn>(module_, reinterpret_cast<const char*>(cInfoHelp.helpMethodDecoratedName));
+	return CreateClass(className);
+}
+
+const TestModuleInfo& TestModule::Info()
+{
+	return moduleInfo_;
+}
+
+LONG TestModule::OnException(_EXCEPTION_POINTERS *exceptionInfo)
+{
+	//  if the code is the MS Unit test exception
+	if (exceptionInfo->ExceptionRecord->ExceptionCode == 0xe3530001)
+	{
+		exceptionHandler_->OnException(reinterpret_cast<const wchar_t*>(exceptionInfo->ExceptionRecord->ExceptionInformation[0]));
+		return EXCEPTION_CONTINUE_EXECUTION;
+	}
+	else
+		return EXCEPTION_CONTINUE_SEARCH;
+}
+
+LONG TestModule::OnExceptionThunk(_EXCEPTION_POINTERS *ExceptionInfo)
+{
+	if (Instance == nullptr)
+		return 0;
+
+	return Instance->OnException(ExceptionInfo);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TestClass_
+
+TestClass_::TestClass_(TestModule &module, const std::string &className)
+	:module_(module), impl_(nullptr), className_(className)
+{
+	auto cInfoHelp = module_.Info().GetClassInfoByName(className);
+	auto cInfoFn = module_.GetFunctionAddress<GetClassInfoFn>(reinterpret_cast<const char*>(cInfoHelp.helpMethodDecoratedName));
 	auto cInfo = cInfoFn();
 	if (cInfo != classInfo_)
 	{
 		classInfo_ = cInfo;
-		// run the class initializer method
 	}
-	
-	// TODO: wrappers for RAII
-	auto instance = PeUtils::CreateExecutioner([this]() { return classInfo_->pNewMethod(); }, [this](TestClassImpl *inst) { return 	classInfo_->pDeleteMethod(inst); });
 
-	// TODO: execute test method initialize
-	auto mInfoFn = GetProc<MembMethodInfoLoadFn>(module_, moduleInfo_.GetDecoratedMethodName(methodName).c_str());
+	
+}
+
+TestClass_::~TestClass_()
+{
+	if(impl_)
+		classInfo_->pDeleteMethod(impl_);
+}
+
+void TestClass_::Reset()
+{
+	if (impl_)
+		classInfo_->pDeleteMethod(impl_);
+
+	impl_ = classInfo_->pNewMethod();
+}
+
+const std::string& TestClass_::Name() const
+{
+	return className_;
+}
+
+void TestClass_::Initialize()
+{
+	// load the static class initializer here.
+}
+
+void TestClass_::Cleanup()
+{
+	// load the static class initilizer here
+}
+
+void TestClass_::InvokeMethodSetup()
+{
+	// load the test class method initialzer
+}
+
+void TestClass_::InvokeMethodCleanup()
+{
+	// load the test class teardown
+}
+
+void TestClass_::InvokeMethod(const std::string &methodName)
+{
+	auto mInfoFn = module_.GetFunctionAddress<MembMethodInfoLoadFn>(module_.Info().GetDecoratedMethodName(methodName).c_str());
 	auto mInfo = mInfoFn();
-	
-	try
-	{
-		instance.Get()->__Invoke(mInfo->method.pVoidMethod); // hmmm... 
-	}
-	catch (const std::exception &e)
-	{
-		cb->OnError(e.what());
-		return;
-	}
-	catch (...)
-	{
-		cb->OnError("Unknown C++ Exception");
-		return;
-	}
-
-	cb->OnComplete();
-	// TODO: execute test method cleanup
-
-	// TODO: execute class cleanup function
-
+		
+	impl_->__Invoke(mInfo->method.pVoidMethod); // hmmm... 
 
 }

@@ -1,15 +1,15 @@
-﻿using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
+﻿using Microsoft.VisualStudio.TestPlatform.ObjectModel;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
+using MsCppUnitTestAdapter;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Microsoft.VisualStudio.TestPlatform.ObjectModel.Logging;
-using Microsoft.VisualStudio.TestPlatform.ObjectModel;
 
 namespace MsCppUnitTestDiscoverer
 {
     [FileExtension(".dll")]
+    [FileExtension(".exe")]
     [DefaultExecutorUri(CppUnitTestDiscoverer.ExecutorUri)]
     [ExtensionUri(CppUnitTestDiscoverer.ExecutorUri)]
     public class CppUnitTestDiscoverer : ITestDiscoverer, ITestExecutor
@@ -49,8 +49,10 @@ namespace MsCppUnitTestDiscoverer
                     tc.DisplayName = test.DisplayName;
                     tc.LineNumber = test.LineNumber;
                     tc.CodeFilePath = test.FileName;
-                    var tp = TestProperty.Find("ClassName")  ?? TestProperty.Register("ClassName", "ClassName", typeof(string), typeof(TestCase));
+                    var tp = TestProperty.Find("ClassName") ?? TestProperty.Register("ClassName", "ClassName", typeof(string), typeof(TestCase));
                     tc.SetPropertyValue(tp, test.ClassName);
+
+                    tc.Traits.Add(new Trait("ClassName", "test"));
                     cases.Add(tc);
                 }
             }
@@ -59,43 +61,46 @@ namespace MsCppUnitTestDiscoverer
 
         private void ExecuteTests(IEnumerable<TestCase> tests, IFrameworkHandle frameworkHandle)
         {
-            // sort the tests by source.
+            // sort the tests by source. easier in .NET
             var ordered = tests.GroupBy(tc => tc.Source);
 
-            TestResult res = null;
+            TestResult result = null;
             foreach (var srcList in ordered)
             {
                 try
                 {
                     // Setup Execution Context
-                    var ectx = new MsCppUnitTestAdapter.VsTestAdapterExecutionContext(srcList.Key);
-                    // Execute each test
-
-                    var classes = srcList.GroupBy(tc => tc.GetPropertyValue<String>(TestProperty.Find("ClassName"), ""));
-
-                    foreach (var testClassList in classes)
+                    using (var ectx = new MsCppUnitTestAdapter.VsTestAdapterExecutionContext(srcList.Key))
                     {
-                        foreach (var test in testClassList)
+                        var classes = srcList.GroupBy(tc => tc.GetPropertyValue<String>(TestProperty.Find("ClassName"), ""));
+                        
+                        foreach (var testClassList in classes)
                         {
-                            res = new TestResult(test);
-                            res.StartTime = DateTimeOffset.Now;
+                            // initialize class
+                            ectx.LoadClass(testClassList.Key);
+                            foreach (var test in testClassList)
+                            {                             
+                                frameworkHandle.RecordStart(test);
 
-                            frameworkHandle.RecordStart(test);
-
-                            ectx.Execute(test.FullyQualifiedName, res);
-
-                            frameworkHandle.RecordResult(res);
+                                result = new TestResult(test);
+                                ectx.ExecuteMethod(test.FullyQualifiedName, result);
+                                frameworkHandle.RecordResult(result);
+                            }
+                            ectx.UnloadClass(testClassList.Key);
                         }
                     }
                 }
                 catch (Exception e)
                 {
-                    res.EndTime = DateTimeOffset.Now;
-                    res.Duration = res.EndTime - res.StartTime;
-                    res.Outcome = TestOutcome.Failed;
-                    res.ErrorMessage = e.Message;
-                    res.ErrorStackTrace = e.StackTrace;
-                    frameworkHandle.RecordResult(res);
+                    if (result == null)
+                        continue;
+
+                    result.EndTime = DateTimeOffset.Now;
+                    result.Duration = result.EndTime - result.StartTime;
+                    result.Outcome = TestOutcome.Failed;
+                    result.ErrorMessage = e.Message;
+                    result.ErrorStackTrace = e.StackTrace;
+                    frameworkHandle.RecordResult(result);
                 }
             }
         }

@@ -4,15 +4,16 @@
 #include "../src/PEUtils.h"
 #include "CppUnitTest.h"
 
-#include <string>
-#include <vector>
-#include <memory>
-
 #ifdef CPPUNITTEST_EXPORTS
 #define CPPUNITTEST_API __declspec(dllexport)
 #else
 #define CPPUNITTEST_API __declspec(dllimport)
 #endif
+
+
+#include <string>
+#include <vector>
+#include <memory>
 
 namespace CppUnitTestInvestigator
 {
@@ -20,7 +21,7 @@ namespace CppUnitTestInvestigator
 	using ModuleAttribute = std::pair<std::wstring, std::wstring>;
 	using MethodAttribute = std::pair<std::wstring, const void*>;
 
-	class CPPUNITTEST_API TestModule
+	class CPPUNITTEST_API TestModuleInfo
 	{
 		PeUtils::PeExplorer load_;
 		const std::string path_;
@@ -37,8 +38,8 @@ namespace CppUnitTestInvestigator
 
 	public:
 
-		TestModule(const std::string &modulePath);
-		~TestModule();
+		TestModuleInfo(const std::string &modulePath);
+		~TestModuleInfo();
 
 		uint32_t GetVersion();
 	
@@ -65,29 +66,94 @@ namespace CppUnitTestInvestigator
 
 	};
 
-	class IExecutionCallback
+	class TestModule;
+
+	class IReportException
 	{
 	public:
-		virtual ~IExecutionCallback() {}
-		virtual void OnError(const char *msg) = 0;
-		virtual void OnComplete() = 0;
+		virtual ~IReportException() = default;
+		virtual void OnException(const wchar_t *message) = 0;
+	};
+	
+	template<typename CallableT>
+	class CallableExceptionHandler : public IReportException 
+	{
+		CallableT onException_;
+	public:
+		CallableExceptionHandler(CallableT &onException)
+			:onException_(onException)
+		{
+		}
+		virtual void OnException(const wchar_t *message) override
+		{
+			onException_(message);
+		}
+
 	};
 
-	class CPPUNITTEST_API TestExecutionContext
+	template <typename T>
+	auto MakeExceptionHandler(T callable)
 	{
-		const TestModule moduleInfo_;
-		HMODULE module_;
-		::Microsoft::VisualStudio::CppUnitTestFramework::TestClassInfo *classInfo_;
-		
+		return CallableExceptionHandler<T>(callable);
+	}
+
+	class CPPUNITTEST_API TestClass_
+	{
+		TestModule &module_;
+
+		const std::string className_;
+		Microsoft::VisualStudio::CppUnitTestFramework::TestClassInfo *classInfo_;
+		Microsoft::VisualStudio::CppUnitTestFramework::TestClassImpl *impl_;
+
+
 	public:
-		TestExecutionContext(const std::string &source);
-		~TestExecutionContext();
+		TestClass_(TestModule &module, const std::string &className);
+		~TestClass_();
 
 		void Initialize();
-		void Execute(const std::string &methodName, IExecutionCallback *cb);
 		void Cleanup();
+
+		const std::string & Name() const;
+
+		void Reset();
+
+		void InvokeMethodSetup();
+		void InvokeMethodCleanup();
+		void InvokeMethod(const std::string &methodName);
 	};
 
+	class CPPUNITTEST_API TestModule
+	{
+		const TestModuleInfo moduleInfo_;
+		HMODULE module_;
+		IReportException *exceptionHandler_;
+
+	private:
+		void InitializeModule();
+		void ModuleCleanup();
+
+	private:
+		static TestModule *Instance;
+
+	public:
+		TestModule(const std::string &source, IReportException *exceptionHandler);
+		~TestModule();
+
+		TestClass_* CreateClass(const std::string &className);
+		TestClass_* CreateClassFromMethodName(const std::string &methodName);
+
+		const TestModuleInfo & Info();
+		template <typename FnT>
+		FnT GetFunctionAddress(const char *name)
+		{
+			return GetProc<FnT>(module_, name);
+		}
+
+		LONG OnException(_EXCEPTION_POINTERS *exceptionInfo);
+		
+		static LONG __stdcall OnExceptionThunk(_EXCEPTION_POINTERS *ExceptionInfo);
+
+	};
 };
 
 

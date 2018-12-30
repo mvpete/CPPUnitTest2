@@ -13,35 +13,10 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Documentation">
-      <UniqueIdentifier>{8ce95c3e-4cb5-4b49-9b90-0c6227773a83}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="inc\CPPUnitTestInvestigator.h">
+    <ClInclude Include="inc\assert.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\PEUtils.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="inc\CppUnitTestInvestigatorApi.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="src\CPPUnitTestInvestigator.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\PEUtils.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="README.txt">
-      <Filter>Documentation</Filter>
-    </Text>
   </ItemGroup>
 </Project>

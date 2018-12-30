@@ -4,15 +4,16 @@
 #include <CPPUnitTestInvestigator/inc/CPPUnitTestInvestigator.h>
 
 #include <string>
+#include <vector>
 #include <memory>
 
 using namespace System;
 using namespace System::Collections::Generic;
 using namespace Microsoft::VisualStudio::TestPlatform::ObjectModel;
+using namespace Microsoft::VisualStudio::TestPlatform::ObjectModel::Adapter;
 
 namespace MsCppUnitTestAdapter 
 {
-
 	std::string MarshalString(String ^ s) 
 	{
 		using namespace Runtime::InteropServices;
@@ -38,15 +39,23 @@ namespace MsCppUnitTestAdapter
 		static IEnumerable<TestInfo ^>^ DiscoverTests(System::String ^source);
 	};
 
+	public interface class IVsTestAdapterTestResult
+	{
+		void FailTest(System::String ^message);
+	};
+	
 	public ref class VsTestAdapterExecutionContext
 	{
-		
-		CppUnitTestInvestigator::TestExecutionContext *context_;
-
+		CppUnitTestInvestigator::IReportException *handler_;
+		CppUnitTestInvestigator::TestModule *context_;
+		std::vector<CppUnitTestInvestigator::TestClass_*> *classes_;
 	public:
 		VsTestAdapterExecutionContext(System::String ^sourceFile);
 		~VsTestAdapterExecutionContext();
 
-		void Execute(System::String ^methodName, TestResult ^res);
+		void LoadClass(System::String ^className);
+		void UnloadClass(System::String ^className);
+		void ExecuteMethod(System::String ^methodName, TestResult ^res);
+		
 	};
 }

@@ -64,6 +64,18 @@ template<> inline std::wstring Microsoft::VisualStudio::CppUnitTestFramework::To
 }
 
 
+LONG WINAPI ExceptionHandler(struct _EXCEPTION_POINTERS *ExceptionInfo)
+{
+	
+	//auto ptr = GetExceptionInformation();
+	ExceptionInfo->ExceptionRecord->ExceptionCode;
+
+	return EXCEPTION_CONTINUE_SEARCH;
+	//return EXCEPTION_EXECUTE_HANDLER;
+
+
+}
+
 /// Woah. These tests are so.... meta.
 
 namespace CPPUnitTestInvestigatorTest
@@ -101,19 +113,19 @@ namespace CPPUnitTestInvestigatorTest
 	public:
 
 		BEGIN_TEST_CLASS_ATTRIBUTE()
-			TEST_CLASS_ATTRIBUTE(L"CPPUintTestAttribute", "Test")
-			END_TEST_CLASS_ATTRIBUTE()
+			TEST_CLASS_ATTRIBUTE(L"CPPUnitTestAttribute", "Test")
+		END_TEST_CLASS_ATTRIBUTE()
 
 			// This test is testing that the currently loaded test DLL is the same as the 
-			TEST_METHOD(TestVersionMatch)
+		TEST_METHOD(TestVersionMatch)
 		{
-			TestModule tm(IntrospecDllPath());
+			TestModuleInfo tm(IntrospecDllPath());
 			Assert::IsTrue(tm.GetVersion() == __CPPUNITTEST_VERSION__);
 		}
 
 		TEST_METHOD(TestGetModuleMethodName)
 		{
-			TestModule tm(IntrospecDllPath());
+			TestModuleInfo tm(IntrospecDllPath());
 			auto methods = tm.GetModuleMethodNames();
 
 			Assert::AreNotEqual(Wrap(methods, std::end(methods)), Wrap(methods, std::find(std::begin(methods), std::end(methods), std::string("TestGetModuleMethodName"))), L"TestMethod not found");
@@ -122,11 +134,11 @@ namespace CPPUnitTestInvestigatorTest
 		BEGIN_TEST_METHOD_ATTRIBUTE(TestGetMethodAttributes)
 			TEST_METHOD_ATTRIBUTE(L"TestAttribute", "TestAttributeValue")
 			TEST_METHOD_ATTRIBUTE(L"TestAttributeIntValue", reinterpret_cast<const void*>(5))
-			END_TEST_METHOD_ATTRIBUTE()
+		END_TEST_METHOD_ATTRIBUTE()
 
-			TEST_METHOD(TestGetMethodAttributes)
+		TEST_METHOD(TestGetMethodAttributes)
 		{
-			TestModule tm(IntrospecDllPath());
+			TestModuleInfo tm(IntrospecDllPath());
 			auto attributes = tm.GetMethodAttributes("TestGetMethodAttributes");
 
 			Assert::AreEqual(size_t(2), attributes.size());
@@ -136,7 +148,7 @@ namespace CPPUnitTestInvestigatorTest
 
 		TEST_METHOD(TestGetModuleAttributes)
 		{
-			TestModule tm(IntrospecDllPath());
+			TestModuleInfo tm(IntrospecDllPath());
 			auto attributes = tm.GetModuleAttributes();
 
 			Assert::IsTrue(attributes.size() == 5);
@@ -144,7 +156,7 @@ namespace CPPUnitTestInvestigatorTest
 
 		TEST_METHOD(TestGetClassNames)
 		{
-			TestModule tm(IntrospecDllPath());
+			TestModuleInfo tm(IntrospecDllPath());
 			auto classes = tm.GetClassNames();
 
 			Assert::AreEqual(size_t(2), classes.size());
@@ -154,7 +166,7 @@ namespace CPPUnitTestInvestigatorTest
 
 		TEST_METHOD(TestGetDummyClassAttributes)
 		{
-			TestModule tm(IntrospecDllPath());
+			TestModuleInfo tm(IntrospecDllPath());
 
 			auto attributes = tm.GetClassAttributes("DummyClass");
 			Assert::AreEqual(size_t(3), attributes.size());
@@ -162,7 +174,7 @@ namespace CPPUnitTestInvestigatorTest
 
 		TEST_METHOD(TestGetClassInfo)
 		{
-			TestModule tm(IntrospecDllPath());
+			TestModuleInfo tm(IntrospecDllPath());
 
 			auto attributes = tm.GetTestClassInfo();
 			Assert::AreEqual(size_t(2), attributes.size());
@@ -174,7 +186,7 @@ namespace CPPUnitTestInvestigatorTest
 
 		TEST_METHOD(TestOverrideTestName)
 		{
-			TestModule tm(IntrospecDllPath());
+			TestModuleInfo tm(IntrospecDllPath());
 
 			std::string displayName = tm.GetMethodDisplayName("TestOverrideTestName");
 			Assert::AreEqual(std::string("My Override Test Name"), displayName);
@@ -182,7 +194,7 @@ namespace CPPUnitTestInvestigatorTest
 		
 		TEST_METHOD(TestGetTestClassByMethod)
 		{
-			TestModule tm(IntrospecDllPath());
+			TestModuleInfo tm(IntrospecDllPath());
 
 			std::string myClass = tm.GetClassNameByMethodName("TestGetTestClassByMethod");
 			
@@ -193,6 +205,35 @@ namespace CPPUnitTestInvestigatorTest
 		{
 			//Logger::WriteMessage(L"Logged");
 			throw std::runtime_error("Test Failed with a KNOWN C++ Exception");
+		}
+
+		TEST_METHOD(TestVectoredExceptionHandler)
+		{
+			auto handler = MakeExceptionHandler([](const wchar_t *message)
+			{
+				Logger::WriteMessage(message);
+			});
+			TestModule tm(IntrospecDllPath(), &handler);
+			auto clss = tm.CreateClass("CPPUnitTestIntrospection");
+			clss->Reset();
+			clss->InvokeMethod("TestThisWillAssert");
+		}
+
+		TEST_METHOD(TestThisWillAssert)
+		{
+			Assert::AreEqual(3, 4, L"They ain't equal");
+			/////auto h1 = AddVectoredExceptionHandler(1, ExceptionHandler);
+			//__try
+			//{
+			//	throw std::exception("e");
+			//	//Assert::AreEqual(3, 4, L"They ain't equal");
+			//	//Assert::IsTrue(false, L"This is an assert is true");
+			//	//Assert::Fail(L"This is my message", LINE_INFO());
+			//}
+			//__except (ExceptionHandler(GetExceptionInformation()))
+			//{
+			//	int i = 0;
+			//}
 		}
 
 	};

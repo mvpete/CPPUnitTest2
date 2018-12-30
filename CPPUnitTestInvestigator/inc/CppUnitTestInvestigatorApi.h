@@ -1,0 +1,5 @@
+#ifndef __CPPUNITTEST_INVESTIGATOR_API_H__
+#define __CPPUNITTEST_INVESTIGATOR_API_H__
+
+
+#endif
